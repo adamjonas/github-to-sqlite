@@ -1,0 +1,154 @@
+from github_to_sqlite import utils
+import pytest
+import pathlib
+import sqlite_utils
+from sqlite_utils.db import ForeignKey
+import json
+
+
+@pytest.fixture
+def pull_requests():
+    return json.load(open(pathlib.Path(__file__).parent / "pull_requests.json"))
+
+
+@pytest.fixture
+def db(pull_requests):
+    db = sqlite_utils.Database(memory=True)
+    db["repos"].insert(
+        {"id": 1},
+        pk="id",
+        columns={"organization": int, "topics": str, "name": str, "description": str},
+    )
+    utils.save_pull_requests(db, pull_requests, {"id": 1})
+    return db
+
+
+def test_tables(db):
+    assert {"pull_requests", "users", "labels", "repos", "pull_requests_labels", "milestones"} == set(
+        db.table_names()
+    )
+    assert {
+        ForeignKey(
+            table="pull_requests", column="repo", other_table="repos", other_column="id"
+        ),
+        ForeignKey(
+            table="pull_requests",
+            column="milestone",
+            other_table="milestones",
+            other_column="id",
+        ),
+        ForeignKey(
+            table="pull_requests", column="assignee", other_table="users", other_column="id"
+        ),
+        ForeignKey(
+            table="pull_requests", column="user", other_table="users", other_column="id"
+        ),
+    } == set(db["pull_requests"].foreign_keys)
+
+
+def test_pull_requests(db):
+    pull_request_rows = list(db["pull_requests"].rows)
+    assert [
+        {
+            "id": 313384926,
+            "node_id": "MDExOlB1bGxSZXF1ZXN0MzEzMzg0OTI2",
+            "repo": 1,
+            "number": 571,
+            "title": "detect_fts now works with alternative table escaping",
+            "user": 9599,
+            "state": "closed",
+            "locked": false,
+            "assignee": 9599,
+            "milestone": None,
+            "comments": 0,
+            "created_at": "2019-09-03T00:23:39Z",
+            "updated_at": "2019-09-03T00:32:28Z",
+            "closed_at": "2019-09-03T00:32:28Z",
+            "merged_at": "2019-09-03T00:32:28Z",
+            "merge_commit_sha": "2dc5c8dc259a0606162673d394ba8cc1c6f54428",
+            "author_association": "OWNER",
+            "body": "Fixes #570",
+            "type": "pull",
+            "pull_request": "simonw/datasette/pulls/571",
+        },
+        {
+            "id": 489429284,
+            "node_id": "MDU6SXNzdWU0ODk0MjkyODQ=",
+            "repo": 1,
+            "number": 572,
+            "title": "Error running datasette publish with just --source_url",
+            "user": 9599,
+            "state": "open",
+            "locked": 0,
+            "assignee": None,
+            "milestone": 2949431,
+            "comments": 1,
+            "created_at": "2019-09-04T22:19:22Z",
+            "updated_at": "2019-09-04T22:20:38Z",
+            "closed_at": None,
+            "author_association": "OWNER",
+            "body": '```\r\ndatasette publish now cleo.db \\\r\n    --source_url="https://twitter.com/cleopaws" \\\r\n```\r\nGave me this error:\r\n<img width="338" alt="Error_500" src="https://user-images.githubusercontent.com/9599/64295924-74b1e300-cf27-11e9-9aed-c69e99c97030.png">\r\n',
+            "type": "pull_request",
+            "pull_request": None,
+        },
+    ] == pull_request_rows
+
+
+def test_users(db):
+    user_rows = list(db["users"].rows)
+    assert [
+        {
+            "login": "simonw",
+            "id": 9599,
+            "node_id": "MDQ6VXNlcjk1OTk=",
+            "avatar_url": "https://avatars0.githubusercontent.com/u/9599?v=4",
+            "gravatar_id": "",
+            "html_url": "https://github.com/simonw",
+            "type": "User",
+            "site_admin": 0,
+            "name": "simonw",
+        }
+    ] == user_rows
+
+
+def test_milestones(db):
+    milestone_rows = list(db["milestones"].rows)
+    assert [
+        {
+            "html_url": "https://github.com/simonw/datasette/milestone/6",
+            "id": 2949431,
+            "repo": 1,
+            "node_id": "MDk6TWlsZXN0b25lMjk0OTQzMQ==",
+            "number": 6,
+            "title": "Custom templates edition",
+            "description": "Ability to fully customize the HTML templates used to display datasette data.",
+            "creator": 9599,
+            "open_pull_requests": 0,
+            "closed_pull_requests": 21,
+            "state": "closed",
+            "created_at": "2017-11-30T16:41:59Z",
+            "updated_at": "2017-12-10T02:05:05Z",
+            "due_on": None,
+            "closed_at": "2017-12-10T02:05:05Z",
+        }
+    ] == milestone_rows
+
+
+def test_foreign_keys(db):
+    assert [
+        ForeignKey(
+            table="pull_requests", column="repo", other_table="repos", other_column="id"
+        ),
+        ForeignKey(
+            table="pull_requests",
+            column="milestone",
+            other_table="milestones",
+            other_column="id",
+        ),
+        ForeignKey(
+            table="pull_requests", column="assignee", other_table="users", other_column="id"
+        ),
+        ForeignKey(
+            table="pull_requests", column="user", other_table="users", other_column="id"
+        ),
+    ] == db["pull_requests"].foreign_keys
